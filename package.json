@@ -1,0 +1,28 @@
+{
+  "name": "productflow",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,blue \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch server/index.mjs",
+    "dev:web": "vite",
+    "build": "tsc -b && vite build",
+    "start": "node server/index.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "express": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "lucide-react": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
