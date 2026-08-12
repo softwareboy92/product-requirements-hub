@@ -56,25 +56,36 @@ db.exec(`
 const app = express()
 app.use(express.json({ limit: '256kb' }))
 
-const requireSelect = `SELECT r.id, r.code, r.title, r.description, r.priority, r.status, r.source, r.due_date AS dueDate, r.created_at AS createdAt, COALESCE(p.name, '未分类') AS project FROM requirements r LEFT JOIN projects p ON p.id = r.project_id`
+const requireSelect = `SELECT r.id, r.code, r.title, r.description, r.project_id AS projectId, r.type, r.priority, r.status, r.source, r.due_date AS dueDate, r.created_at AS createdAt, COALESCE(p.name, '未分类') AS project FROM requirements r LEFT JOIN projects p ON p.id = r.project_id`
 const taskSelect = `SELECT t.id, t.title, t.priority, t.due_date AS dueDate, t.is_done AS done, COALESCE(r.code, '个人计划') AS requirement FROM tasks t LEFT JOIN requirements r ON r.id = t.requirement_id`
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, database: 'sqlite' }))
 app.get('/api/requirements', (_req, res) => res.json(db.prepare(`${requireSelect} ORDER BY r.created_at DESC, r.id DESC`).all()))
 app.post('/api/requirements', (req, res) => {
   const title = String(req.body?.title || '').trim()
+  const projectId = Number(req.body?.projectId)
+  const description = String(req.body?.description || '').trim()
+  const type = String(req.body?.type || '功能需求')
+  const priority = String(req.body?.priority || 'P2')
+  const status = String(req.body?.status || 'Inbox')
+  const source = String(req.body?.source || '自己规划')
+  const dueDate = req.body?.dueDate ? String(req.body.dueDate) : null
   if (!title || title.length > 200) return res.status(400).json({ error: '需求标题不能为空，且不能超过 200 个字符。' })
-  const result = db.prepare(`INSERT INTO requirements (code, title, source) VALUES ('PENDING', ?, '快速记录')`).run(title)
+  if (!Number.isInteger(projectId) || !db.prepare('SELECT 1 FROM projects WHERE id = ?').get(projectId)) return res.status(400).json({ error: '请选择需求所属项目。' })
+  if (!['功能需求', '优化需求', '缺陷修复', '技术改造', '调研事项', '其他'].includes(type)) return res.status(400).json({ error: '需求类型无效。' })
+  if (!['P0', 'P1', 'P2', 'P3'].includes(priority)) return res.status(400).json({ error: '需求优先级无效。' })
+  if (!['Inbox', '待整理', '待评估', '已确认', '方案设计', '待开发', '开发中', '待验收', '已上线', '已完成'].includes(status)) return res.status(400).json({ error: '需求状态无效。' })
+  const result = db.prepare(`INSERT INTO requirements (code, title, description, project_id, type, source, priority, status, due_date) VALUES ('PENDING', ?, ?, ?, ?, ?, ?, ?, ?)`).run(title, description, projectId, type, source, priority, status, dueDate)
   const id = Number(result.lastInsertRowid)
   const code = `REQ-${1000 + id}`
   db.prepare('UPDATE requirements SET code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(code, id)
-  db.prepare('INSERT INTO activities (entity_type, entity_id, action, detail) VALUES (?, ?, ?, ?)').run('requirement', id, 'created', '通过快速记录创建')
+  db.prepare('INSERT INTO activities (entity_type, entity_id, action, detail) VALUES (?, ?, ?, ?)').run('requirement', id, 'created', '创建需求')
   res.status(201).json(db.prepare(`${requireSelect} WHERE r.id = ?`).get(id))
 })
 app.patch('/api/requirements/:id', (req, res) => {
   const current = db.prepare('SELECT * FROM requirements WHERE id = ?').get(req.params.id)
   if (!current) return res.status(404).json({ error: '需求不存在。' })
-  const allowed = ['title', 'description', 'priority', 'status', 'source', 'due_date']
+  const allowed = ['title', 'description', 'project_id', 'type', 'priority', 'status', 'source', 'due_date']
   const updates = Object.entries(req.body || {}).filter(([key]) => allowed.includes(key))
   if (!updates.length) return res.status(400).json({ error: '没有可更新的字段。' })
   const fields = updates.map(([key]) => `${key} = ?`).join(', ')
@@ -89,7 +100,23 @@ app.patch('/api/tasks/:id', (req, res) => {
   const task = db.prepare(`${taskSelect} WHERE t.id = ?`).get(req.params.id)
   res.json({ ...task, done: Boolean(task.done) })
 })
-app.get('/api/projects', (_req, res) => res.json(db.prepare(`SELECT p.id, p.name, p.color, COUNT(r.id) AS total, SUM(CASE WHEN r.status IN ('已完成','已上线') THEN 1 ELSE 0 END) AS done FROM projects p LEFT JOIN requirements r ON r.project_id = p.id GROUP BY p.id ORDER BY p.id`).all()))
+app.get('/api/projects', (_req, res) => res.json(db.prepare(`SELECT p.id, p.name, p.color, COUNT(r.id) AS total, COALESCE(SUM(CASE WHEN r.status IN ('已完成','已上线') THEN 1 ELSE 0 END), 0) AS done FROM projects p LEFT JOIN requirements r ON r.project_id = p.id GROUP BY p.id ORDER BY p.created_at DESC, p.id DESC`).all()))
+app.post('/api/projects', (req, res) => {
+  const name = String(req.body?.name || '').trim()
+  const color = String(req.body?.color || 'blue')
+  if (!name || name.length > 100) return res.status(400).json({ error: '项目名称不能为空，且不能超过 100 个字符。' })
+  if (!['blue', 'purple', 'green'].includes(color)) return res.status(400).json({ error: '项目颜色无效。' })
+  try {
+    const result = db.prepare('INSERT INTO projects (name, color) VALUES (?, ?)').run(name, color)
+    const id = Number(result.lastInsertRowid)
+    db.prepare('INSERT INTO activities (entity_type, entity_id, action, detail) VALUES (?, ?, ?, ?)').run('project', id, 'created', '创建项目')
+    res.status(201).json(db.prepare(`SELECT p.id, p.name, p.color, 0 AS total, 0 AS done FROM projects p WHERE p.id = ?`).get(id))
+  } catch (error) {
+    if (String(error).includes('UNIQUE constraint failed')) return res.status(409).json({ error: '已存在同名项目。' })
+    throw error
+  }
+})
+app.get('/api/projects/:id/requirements', (req, res) => res.json(db.prepare(`${requireSelect} WHERE r.project_id = ? ORDER BY r.created_at DESC, r.id DESC`).all(req.params.id)))
 app.get('/api/dashboard', (_req, res) => {
   const status = db.prepare(`SELECT status AS name, COUNT(*) AS value FROM requirements GROUP BY status`).all()
   const due = db.prepare(`SELECT

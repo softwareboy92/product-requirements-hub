@@ -58,7 +58,8 @@ cp -R data data-backup-$(date +%Y%m%d)
 | `PATCH` | `/api/requirements/:id` | 更新需求字段 |
 | `GET` | `/api/tasks` | 查询任务 |
 | `PATCH` | `/api/tasks/:id` | 更新任务完成状态 |
-| `GET` | `/api/projects` | 查询项目进度 |
+| `GET` / `POST` | `/api/projects` | 查询或创建项目 |
+| `GET` | `/api/projects/:id/requirements` | 查询项目下的需求 |
 | `GET` | `/api/dashboard` | 查询首页统计 |
 
 创建需求示例：
@@ -66,7 +67,7 @@ cp -R data data-backup-$(date +%Y%m%d)
 ```bash
 curl -X POST http://127.0.0.1:3000/api/requirements \\
   -H 'Content-Type: application/json' \\
-  -d '{"title":"提现白名单增加批量导入"}'
+  -d '{"title":"优化账号设置流程"}'
 ```
 
 ## 项目结构
