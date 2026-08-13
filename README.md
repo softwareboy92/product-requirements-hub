@@ -6,6 +6,8 @@
 
 - 今日工作台：到期提醒、任务、需求状态和项目进度
 - 需求收件箱：通过全局“快速需求”或 `Cmd/Ctrl + K` 立即记录
+- 报告中心：按真实需求变更生成日报、周报，并可补充下一步计划与风险
+- 项目周快照：自动保留上周项目基线，也可手动保存本周快照；历史快照不会被覆盖
 - 本地持久化：需求、任务、项目和活动记录都存储在 SQLite
 - 默认仅监听 `127.0.0.1`，不会主动连接外部服务
 
@@ -59,7 +61,14 @@ cp -R data data-backup-$(date +%Y%m%d)
 | `GET` | `/api/tasks` | 查询任务 |
 | `PATCH` | `/api/tasks/:id` | 更新任务完成状态 |
 | `GET` / `POST` | `/api/projects` | 查询或创建项目 |
+| `PATCH` | `/api/projects/:id` | 更新项目目标、周期、状态与健康度 |
 | `GET` | `/api/projects/:id/requirements` | 查询项目下的需求 |
+| `GET` | `/api/activities` | 查询需求字段变更记录 |
+| `GET` | `/api/reports` | 查询日报与周报历史 |
+| `POST` | `/api/reports/generate` | 根据当前真实数据生成日报或周报 |
+| `PATCH` | `/api/reports/:id` | 编辑报告摘要、计划与风险 |
+| `GET` | `/api/snapshots` | 查询项目周快照 |
+| `POST` | `/api/snapshots/generate` | 保存本周或上周项目快照 |
 | `GET` | `/api/dashboard` | 查询首页统计 |
 
 创建需求示例：
